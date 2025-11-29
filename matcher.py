@@ -76,3 +76,18 @@ def assign_presentations(students_df, dates):
             df.at[idx, 'Assigned Date'] = best_date
     
     return df
+
+def assign_press_pool(students_df, dates):
+    reviews = []
+    for _, student in students_df.iterrows():
+        # Ensure reviewer doesn't review on their presentation day
+        valid_dates = [d for d in dates if d != student['Assigned Date']]
+        review_dates = random.sample(valid_dates, REVIEWS_PER_STUDENT)
+        
+        reviews.append({
+            'Presentation Date': student['Assigned Date'],
+            'Student Name': student['Student Name'],
+            'Review Date 1': review_dates[0],
+            'Review Date 2': review_dates[1]
+        })
+    return pd.DataFrame(reviews)
