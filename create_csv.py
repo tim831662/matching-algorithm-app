@@ -1,0 +1,32 @@
+import csv
+
+data = [
+    ["Student Name", "Choice 1", "Choice 2", "Choice 3", "Partner Name"],
+    ["Alpha Student", "9/8/2025", "9/10/2025", "9/15/2025", "Beta Student"],
+    ["Beta Student", "9/8/2025", "9/22/2025", "10/1/2025", "Alpha Student"],
+    ["Gamma Student", "9/8/2025", "9/10/2025", "10/6/2025", "Delta Student"],
+    ["Delta Student", "9/8/2025", "9/15/2025", "9/22/2025", "Gamma Student"],
+    ["Epsilon Student", "9/8/2025", "9/10/2025", "11/3/2025", "N/A"],
+    ["Zeta Student", "9/8/2025", "9/17/2025", "10/8/2025", "Eta Student"],
+    ["Eta Student", "9/8/2025", "10/1/2025", "10/13/2025", "Zeta Student"],
+    ["Theta Student", "9/8/2025", "10/6/2025", "10/22/2025", "N/A"],
+    ["Iota Student", "9/8/2025", "10/8/2025", "11/5/2025", "Kappa Student"],
+    ["Kappa Student", "9/8/2025", "11/17/2025", "12/1/2025", "Iota Student"],
+    ["Liam Smith", "9/10/2025", "9/15/2025", "9/17/2025", "Mia Johnson"],
+    ["Mia Johnson", "9/10/2025", "9/22/2025", "9/24/2025", "Liam Smith"],
+    ["Noah Williams", "9/15/2025", "10/1/2025", "10/8/2025", "N/A"],
+    ["Olivia Brown", "9/15/2025", "10/1/2025", "10/13/2025", "Peter Jones"],
+    ["Peter Jones", "9/17/2025", "10/6/2025", "10/8/2025", "Olivia Brown"],
+    ["Quinn Davis", "9/17/2025", "10/8/2025", "11/3/2025", "N/A"],
+    ["Ryan Miller", "9/22/2025", "9/24/2025", "9/29/2025", "Sophia Wilson"],
+    ["Sophia Wilson", "9/22/2025", "9/29/2025", "10/1/2025", "Ryan Miller"],
+    ["Tom Moore", "9/24/2025", "10/1/2025", "10/6/2025", "Uma Taylor"],
+    ["Uma Taylor", "9/24/2025", "10/6/2025", "10/13/2025", "Tom Moore"]
+]
+
+# Write to CSV
+with open("students_survey.csv", "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerows(data)
+
+print("Success! 'students_survey.csv' has been created with partner information.")
