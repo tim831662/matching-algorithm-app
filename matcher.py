@@ -91,3 +91,15 @@ def assign_press_pool(students_df, dates):
             'Review Date 2': review_dates[1]
         })
     return pd.DataFrame(reviews)
+
+def save_excel(df, filename):
+    try:
+        with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Sheet1')
+            # Auto-adjust column width
+            for column in writer.sheets['Sheet1'].columns:
+                max_len = max(len(str(cell.value)) for cell in column)
+                writer.sheets['Sheet1'].column_dimensions[column[0].column_letter].width = max_len + 2
+        print(f"Created: {filename}")
+    except Exception as e:
+        print(f"Error saving {filename}: {e}")
