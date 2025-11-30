@@ -28,7 +28,7 @@ def assign_presentations(students_df, dates):
     df = df.sample(frac=1, random_state=42).reset_index(drop=True)
     assigned = set()
     
-    # 1. Partner Matching: Force mutual partners onto the same date
+    # 1. Partner Matching
     for idx, student in df.iterrows():
         if idx in assigned: continue
             
@@ -44,20 +44,35 @@ def assign_presentations(students_df, dates):
         partner_choice = df.loc[partner_idx, 'Partner Name']
         if pd.isna(partner_choice) or str(partner_choice).strip() != student['Student Name'].strip(): continue
         
-        # Find common date
-        for choice_num in range(1, 4):
-            date = student[f'Choice {choice_num}']
-            partner_choices = [df.loc[partner_idx, f'Choice {i}'] for i in range(1, 4)]
+        # Get all choices from both students
+        s_choices = [student[f'Choice {i}'] for i in range(1, 4)]
+        p_choices = [df.loc[partner_idx, f'Choice {i}'] for i in range(1, 4)]
+        
+        # Combine choices into one preference list
+        all_choices = []
+        for d in s_choices + p_choices:
+            if d not in all_choices: all_choices.append(d)
             
-            if date in partner_choices and len(schedule[date]) <= MAX_STUDENTS_PER_DATE - 2:
-                schedule[date].extend([idx, partner_idx])
-                df.at[idx, 'Assigned Date'] = date
-                df.at[partner_idx, 'Assigned Date'] = date
-                assigned.add(idx)
-                assigned.add(partner_idx)
+        target_date = None
+        
+        # Try to fit them in one of their preferred dates
+        for date in all_choices:
+            if len(schedule[date]) <= MAX_STUDENTS_PER_DATE - 2:
+                target_date = date
                 break
+        
+        # Fallback
+        if not target_date:
+            target_date = min(schedule, key=lambda d: len(schedule[d]))
+            
+        # Assign both students to the target date
+        schedule[target_date].extend([idx, partner_idx])
+        df.at[idx, 'Assigned Date'] = target_date
+        df.at[partner_idx, 'Assigned Date'] = target_date
+        assigned.add(idx)
+        assigned.add(partner_idx)
     
-    # 2. Individual Matching: Assign remaining based on preferences
+    # 2. Individual Matching
     for choice_num in range(1, 4):
         for idx, student in df.iterrows():
             if idx in assigned: continue
@@ -68,7 +83,7 @@ def assign_presentations(students_df, dates):
                 df.at[idx, 'Assigned Date'] = preferred_date
                 assigned.add(idx)
     
-    # 3. Overflow: Assign unmatched to least crowded dates
+    # 3. Overflow
     for idx in df.index:
         if idx not in assigned:
             best_date = min(schedule, key=lambda d: len(schedule[d]))
@@ -96,7 +111,6 @@ def save_excel(df, filename):
     try:
         with pd.ExcelWriter(filename, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Sheet1')
-            # Auto-adjust column width
             for column in writer.sheets['Sheet1'].columns:
                 max_len = max(len(str(cell.value)) for cell in column)
                 writer.sheets['Sheet1'].column_dimensions[column[0].column_letter].width = max_len + 2
@@ -116,7 +130,6 @@ def main():
         print(f"Error reading CSV: {e}")
         return
     
-    # Run Algorithms
     try:
         final_df = assign_presentations(df, available_dates)
         press_df = assign_press_pool(final_df, available_dates)
@@ -133,7 +146,6 @@ def main():
     
     # Save output
     output_cols = ['Student Name', 'Partner Name', 'Choice 1', 'Choice 2', 'Choice 3', 'Assigned Date']
-    # If 'Partner Name' doesn't exist in CSV, remove it from output list to avoid error
     if 'Partner Name' not in final_df.columns: 
         output_cols.remove('Partner Name')
 
