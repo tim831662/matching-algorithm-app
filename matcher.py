@@ -103,3 +103,42 @@ def save_excel(df, filename):
         print(f"Created: {filename}")
     except Exception as e:
         print(f"Error saving {filename}: {e}")
+
+def main():
+    if not os.path.exists(INPUT_FILENAME):
+        print(f"Error: {INPUT_FILENAME} not found")
+        return
+    
+    try:
+        df = pd.read_csv(INPUT_FILENAME)
+        df.columns = df.columns.str.strip()
+    except Exception as e:
+        print(f"Error reading CSV: {e}")
+        return
+    
+    # Run Algorithms
+    try:
+        final_df = assign_presentations(df, available_dates)
+        press_df = assign_press_pool(final_df, available_dates)
+    except KeyError as e:
+        print(f"Error: Missing column {e}. Ensure CSV has 'Student Name', 'Partner Name', and 'Choice 1-3'")
+        return
+
+    # Sort Chronologically
+    final_df['_sort'] = pd.to_datetime(final_df['Assigned Date'], format='%m/%d/%Y', errors='coerce')
+    final_df = final_df.sort_values('_sort').drop(columns=['_sort'])
+    
+    press_df['_sort'] = pd.to_datetime(press_df['Presentation Date'], format='%m/%d/%Y', errors='coerce')
+    press_df = press_df.sort_values('_sort').drop(columns=['_sort'])
+    
+    # Save output
+    output_cols = ['Student Name', 'Partner Name', 'Choice 1', 'Choice 2', 'Choice 3', 'Assigned Date']
+    # If 'Partner Name' doesn't exist in CSV, remove it from output list to avoid error
+    if 'Partner Name' not in final_df.columns: 
+        output_cols.remove('Partner Name')
+
+    save_excel(final_df[output_cols], OUTPUT_SCHEDULE)
+    save_excel(press_df, OUTPUT_PRESS_POOL)
+
+if __name__ == "__main__":
+    main()
