@@ -1,8 +1,8 @@
 import pandas as pd
 import random
 import os
+from collections import deque
 
-# Configuration
 INPUT_FILENAME = 'students_survey.csv'
 OUTPUT_SCHEDULE = 'Final_Presentation_Schedule.xlsx'
 OUTPUT_PRESS_POOL = 'Final_Press_Pool.xlsx'
@@ -19,86 +19,102 @@ available_dates = [
     "11/17/2025", "11/19/2025", "12/1/2025", "12/3/2025", "12/8/2025"
 ]
 
+def gale_shapley_capacity(students, prefs, dates, capacity):
+    free = deque(students)
+    next_idx = {s: 0 for s in students}
+    accepted = {d: [] for d in dates}
+
+    rank = {}
+    n = len(dates)
+    for s in students:
+        rank[s] = {}
+        for i, d in enumerate(prefs[s]):
+            rank[s][d] = i
+        for d in dates:
+            if d not in rank[s]:
+                rank[s][d] = n + 1
+
+    while free:
+        s = free.popleft()
+        if next_idx[s] < len(prefs[s]):
+            d = prefs[s][next_idx[s]]
+        else:
+            d = min(dates, key=lambda x: len(accepted[x]))
+        next_idx[s] += 1
+
+        if len(accepted[d]) < capacity:
+            accepted[d].append(s)
+        else:
+            worst = max(accepted[d], key=lambda x: rank[x][d])
+            if rank[s][d] < rank[worst][d]:
+                accepted[d].remove(worst)
+                accepted[d].append(s)
+                free.append(worst)
+            else:
+                free.append(s)
+
+    out = {}
+    for d in dates:
+        for s in accepted[d]:
+            out[s] = d
+    return out
+
 def assign_presentations(students_df, dates):
     df = students_df.copy()
     df['Assigned Date'] = None
-    schedule = {d: [] for d in dates}
-    
-    # Randomize for fairness
-    df = df.sample(frac=1, random_state=42).reset_index(drop=True)
-    assigned = set()
-    
-    # 1. Partner Matching
-    for idx, student in df.iterrows():
-        if idx in assigned: continue
-            
-        partner_name = student.get('Partner Name', 'N/A')
-        if pd.isna(partner_name) or str(partner_name).strip().upper() == 'N/A': continue
-        
-        # Find partner index
-        partner_matches = df[df['Student Name'].str.strip() == str(partner_name).strip()].index
-        if len(partner_matches) == 0 or partner_matches[0] in assigned: continue
-        partner_idx = partner_matches[0]
-        
-        # Verify mutual request
-        partner_choice = df.loc[partner_idx, 'Partner Name']
-        if pd.isna(partner_choice) or str(partner_choice).strip() != student['Student Name'].strip(): continue
-        
-        # Get all choices from both students
-        s_choices = [student[f'Choice {i}'] for i in range(1, 4)]
-        p_choices = [df.loc[partner_idx, f'Choice {i}'] for i in range(1, 4)]
-        
-        # Combine choices into one preference list
-        all_choices = []
-        for d in s_choices + p_choices:
-            if d not in all_choices: all_choices.append(d)
-            
-        target_date = None
-        
-        # Try to fit them in one of their preferred dates
-        for date in all_choices:
-            if len(schedule[date]) <= MAX_STUDENTS_PER_DATE - 2:
-                target_date = date
-                break
-        
-        # Fallback
-        if not target_date:
-            target_date = min(schedule, key=lambda d: len(schedule[d]))
-            
-        # Assign both students to the target date
-        schedule[target_date].extend([idx, partner_idx])
-        df.at[idx, 'Assigned Date'] = target_date
-        df.at[partner_idx, 'Assigned Date'] = target_date
-        assigned.add(idx)
-        assigned.add(partner_idx)
-    
-    # 2. Individual Matching
-    for choice_num in range(1, 4):
-        for idx, student in df.iterrows():
-            if idx in assigned: continue
-            
-            preferred_date = student[f'Choice {choice_num}']
-            if len(schedule[preferred_date]) < MAX_STUDENTS_PER_DATE:
-                schedule[preferred_date].append(idx)
-                df.at[idx, 'Assigned Date'] = preferred_date
-                assigned.add(idx)
-    
-    # 3. Overflow
-    for idx in df.index:
-        if idx not in assigned:
-            best_date = min(schedule, key=lambda d: len(schedule[d]))
-            schedule[best_date].append(idx)
-            df.at[idx, 'Assigned Date'] = best_date
-    
+
+    visited = set()
+    groups = []
+
+    for idx, row in df.iterrows():
+        if idx in visited:
+            continue
+        partner = str(row.get("Partner Name", "")).strip()
+        name = row['Student Name'].strip()
+        if partner and partner.upper() != "N/A":
+            match = df[df['Student Name'].str.strip() == partner]
+            if len(match) > 0:
+                p_idx = match.index[0]
+                p_partner = str(df.loc[p_idx, 'Partner Name']).strip()
+                if p_partner == name:
+                    groups.append((idx, p_idx))
+                    visited.add(idx)
+                    visited.add(p_idx)
+                    continue
+        groups.append((idx,))
+        visited.add(idx)
+
+    students = []
+    prefs = {}
+
+    for g in groups:
+        gid = tuple(g)
+        students.append(gid)
+        P = []
+        for member in g:
+            for c in ["Choice 1", "Choice 2", "Choice 3"]:
+                d = df.loc[member, c]
+                if d not in P:
+                    P.append(d)
+        for d in dates:
+            if d not in P:
+                P.append(d)
+        prefs[gid] = P
+
+    assignment = gale_shapley_capacity(students, prefs, dates, MAX_STUDENTS_PER_DATE)
+
+    for g in groups:
+        d = assignment[g]
+        for idx in g:
+            df.at[idx, 'Assigned Date'] = d
+
     return df
 
 def assign_press_pool(students_df, dates):
     reviews = []
     for _, student in students_df.iterrows():
-        # Ensure reviewer doesn't review on their presentation day
         valid_dates = [d for d in dates if d != student['Assigned Date']]
         review_dates = random.sample(valid_dates, REVIEWS_PER_STUDENT)
-        
         reviews.append({
             'Presentation Date': student['Assigned Date'],
             'Student Name': student['Student Name'],
@@ -122,14 +138,14 @@ def main():
     if not os.path.exists(INPUT_FILENAME):
         print(f"Error: {INPUT_FILENAME} not found")
         return
-    
+
     try:
         df = pd.read_csv(INPUT_FILENAME)
         df.columns = df.columns.str.strip()
     except Exception as e:
         print(f"Error reading CSV: {e}")
         return
-    
+
     try:
         final_df = assign_presentations(df, available_dates)
         press_df = assign_press_pool(final_df, available_dates)
@@ -137,16 +153,14 @@ def main():
         print(f"Error: Missing column {e}. Ensure CSV has 'Student Name', 'Partner Name', and 'Choice 1-3'")
         return
 
-    # Sort Chronologically
     final_df['_sort'] = pd.to_datetime(final_df['Assigned Date'], format='%m/%d/%Y', errors='coerce')
     final_df = final_df.sort_values('_sort').drop(columns=['_sort'])
-    
+
     press_df['_sort'] = pd.to_datetime(press_df['Presentation Date'], format='%m/%d/%Y', errors='coerce')
     press_df = press_df.sort_values('_sort').drop(columns=['_sort'])
-    
-    # Save output
+
     output_cols = ['Student Name', 'Partner Name', 'Choice 1', 'Choice 2', 'Choice 3', 'Assigned Date']
-    if 'Partner Name' not in final_df.columns: 
+    if 'Partner Name' not in final_df.columns:
         output_cols.remove('Partner Name')
 
     save_excel(final_df[output_cols], OUTPUT_SCHEDULE)
