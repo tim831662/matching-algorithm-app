@@ -111,15 +111,29 @@ def assign_presentations(students_df, dates):
     return df
 
 def assign_press_pool(students_df, dates):
+    review_count = {d: 0 for d in dates}
     reviews = []
-    for _, student in students_df.iterrows():
-        valid_dates = [d for d in dates if d != student['Assigned Date']]
-        review_dates = random.sample(valid_dates, REVIEWS_PER_STUDENT)
+
+    shuffled_df = students_df.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    for _, student in shuffled_df.iterrows():
+        assigned = student['Assigned Date']
+
+        valid = [d for d in dates if d != assigned]
+
+        student_reviews = []
+        for _ in range(REVIEWS_PER_STUDENT):
+            # Pick the date with the lowest load that isn't already chosen
+            candidates = [d for d in valid if d not in student_reviews]
+            best = min(candidates, key=lambda x: review_count[x])
+            student_reviews.append(best)
+            review_count[best] += 1
+
         reviews.append({
-            'Presentation Date': student['Assigned Date'],
+            'Presentation Date': assigned,
             'Student Name': student['Student Name'],
-            'Review Date 1': review_dates[0],
-            'Review Date 2': review_dates[1]
+            'Review Date 1': student_reviews[0],
+            'Review Date 2': student_reviews[1]
         })
     return pd.DataFrame(reviews)
 
