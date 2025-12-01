@@ -101,7 +101,7 @@ def assign_presentations(students_df, dates):
                 P.append(d)
         prefs[gid] = P
 
-    assignment = gale_shapley_capacity(students, prefs, dates, MAX_STUDENTS_PER_DATE)
+    assignment = gale_shapley_capacity(students, prefs, dates, GROUPS_PER_DATE)
 
     for g in groups:
         d = assignment[g]
