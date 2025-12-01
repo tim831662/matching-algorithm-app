@@ -19,7 +19,7 @@ available_dates = [
     "11/17/2025", "11/19/2025", "12/1/2025", "12/3/2025", "12/8/2025"
 ]
 
-def gale_shapley_capacity(students, prefs, dates, capacity):
+def gale_shapley_capacity(students, prefs, dates, max_students_per_date, group_sizes):
     free = deque(students)
     next_idx = {s: 0 for s in students}
     accepted = {d: [] for d in dates}
@@ -34,19 +34,28 @@ def gale_shapley_capacity(students, prefs, dates, capacity):
             if d not in rank[s]:
                 rank[s][d] = n + 1
 
+    def get_date_capacity(date):
+        return sum(group_sizes[g] for g in accepted[date])
+
     while free:
         s = free.popleft()
+        
         if next_idx[s] < len(prefs[s]):
             d = prefs[s][next_idx[s]]
+            next_idx[s] += 1
         else:
-            d = min(dates, key=lambda x: len(accepted[x]))
-        next_idx[s] += 1
+            d = min(dates, key=lambda x: get_date_capacity(x))
+            accepted[d].append(s)
+            continue
 
-        if len(accepted[d]) < capacity:
+        current_capacity = get_date_capacity(d)
+        group_size = group_sizes[s]
+
+        if current_capacity + group_size <= max_students_per_date:
             accepted[d].append(s)
         else:
-            worst = max(accepted[d], key=lambda x: rank[x][d])
-            if rank[s][d] < rank[worst][d]:
+            worst = max(accepted[d], key=lambda x: rank[x].get(d, n + 1))
+            if rank[s].get(d, n + 1) < rank[worst].get(d, n + 1):
                 accepted[d].remove(worst)
                 accepted[d].append(s)
                 free.append(worst)
@@ -86,10 +95,13 @@ def assign_presentations(students_df, dates):
 
     students = []
     prefs = {}
+    group_sizes = {}
 
     for g in groups:
         gid = tuple(g)
         students.append(gid)
+        group_sizes[gid] = len(g)
+        
         P = []
         for member in g:
             for c in ["Choice 1", "Choice 2", "Choice 3"]:
@@ -101,7 +113,7 @@ def assign_presentations(students_df, dates):
                 P.append(d)
         prefs[gid] = P
 
-    assignment = gale_shapley_capacity(students, prefs, dates, GROUPS_PER_DATE)
+    assignment = gale_shapley_capacity(students, prefs, dates, MAX_STUDENTS_PER_DATE, group_sizes)
 
     for g in groups:
         d = assignment[g]
