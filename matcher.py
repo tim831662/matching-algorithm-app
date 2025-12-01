@@ -2,6 +2,7 @@ import pandas as pd
 import random
 import os
 from collections import deque
+from datetime import datetime, timedelta
 
 INPUT_FILENAME = 'students_survey.csv'
 OUTPUT_SCHEDULE = 'Final_Presentation_Schedule.xlsx'
@@ -10,6 +11,7 @@ STUDENTS_PER_GROUP = 2
 GROUPS_PER_DATE = 2
 MAX_STUDENTS_PER_DATE = STUDENTS_PER_GROUP * GROUPS_PER_DATE
 REVIEWS_PER_STUDENT = 2
+MIN_REVIEW_GAP = 3
 
 available_dates = [
     "9/8/2025", "9/10/2025", "9/15/2025", "9/17/2025", "9/22/2025",
@@ -39,23 +41,36 @@ def gale_shapley_capacity(students, prefs, dates, max_students_per_date, group_s
 
     while free:
         s = free.popleft()
+        g_size = group_sizes[s]
         
         if next_idx[s] < len(prefs[s]):
             d = prefs[s][next_idx[s]]
             next_idx[s] += 1
         else:
-            d = min(dates, key=lambda x: get_date_capacity(x))
+            candidates = [date for date in dates if get_date_capacity(date) + g_size <= max_students_per_date]
+            
+            if candidates:
+                d = min(candidates, key=lambda x: get_date_capacity(x))
+            else:
+                d = min(dates, key=lambda x: get_date_capacity(x))
+                
             accepted[d].append(s)
             continue
 
         current_capacity = get_date_capacity(d)
-        group_size = group_sizes[s]
 
-        if current_capacity + group_size <= max_students_per_date:
+        if current_capacity + g_size <= max_students_per_date:
             accepted[d].append(s)
         else:
             worst = max(accepted[d], key=lambda x: rank[x].get(d, n + 1))
-            if rank[s].get(d, n + 1) < rank[worst].get(d, n + 1):
+            worst_size = group_sizes[worst]
+            
+            new_capacity_after_swap = current_capacity - worst_size + g_size
+            
+            is_rank_better = rank[s].get(d, n + 1) < rank[worst].get(d, n + 1)
+            is_capacity_safe = new_capacity_after_swap <= max_students_per_date
+            
+            if is_rank_better and is_capacity_safe:
                 accepted[d].remove(worst)
                 accepted[d].append(s)
                 free.append(worst)
@@ -93,6 +108,8 @@ def assign_presentations(students_df, dates):
         groups.append((idx,))
         visited.add(idx)
 
+    groups.sort(key=lambda g: len(g), reverse=True)
+
     students = []
     prefs = {}
     group_sizes = {}
@@ -122,21 +139,42 @@ def assign_presentations(students_df, dates):
 
     return df
 
-def assign_press_pool(students_df, dates):
+def assign_press_pool(students_df, dates):    
     review_count = {d: 0 for d in dates}
     reviews = []
+    
+    date_objects = {d: datetime.strptime(d, '%m/%d/%Y') for d in dates}
+    date_indices = {d: i for i, d in enumerate(dates)}
 
     shuffled_df = students_df.sample(frac=1, random_state=42).reset_index(drop=True)
 
     for _, student in shuffled_df.iterrows():
         assigned = student['Assigned Date']
-
         valid = [d for d in dates if d != assigned]
 
         student_reviews = []
-        for _ in range(REVIEWS_PER_STUDENT):
-            # Pick the date with the lowest load that isn't already chosen
+        
+        for review_num in range(REVIEWS_PER_STUDENT):
             candidates = [d for d in valid if d not in student_reviews]
+            
+            if student_reviews:
+                last_review = student_reviews[-1]
+                last_date_obj = date_objects[last_review]
+                last_idx = date_indices[last_review]
+                
+                spaced_out = []
+                for d in candidates:
+                    d_obj = date_objects[d]
+                    d_idx = date_indices[d]
+                    days_diff = abs((d_obj - last_date_obj).days)
+                    idx_diff = abs(d_idx - last_idx)
+                    
+                    if idx_diff >= MIN_REVIEW_GAP:
+                        spaced_out.append(d)
+                
+                if spaced_out:
+                    candidates = spaced_out
+            
             best = min(candidates, key=lambda x: review_count[x])
             student_reviews.append(best)
             review_count[best] += 1
